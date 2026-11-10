@@ -1,7 +1,7 @@
 'use strict';
-const VERSION='v11.0.0';
+const VERSION='v11.1.0';
 const SHELL='life-dash-shell-'+VERSION, FONTS='life-dash-fonts-v1';
-const ASSETS=['./','./index.html','./manifest.json','./icon-180.png','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
+const ASSETS=['./','./index.html','./coach.js','./manifest.json','./icon-180.png','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(SHELL).then(c=>c.addAll(ASSETS)));}); // no auto skipWaiting: the page asks the user
 self.addEventListener('activate',e=>{e.waitUntil((async()=>{
   const keep=[SHELL,FONTS];

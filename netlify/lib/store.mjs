@@ -16,3 +16,13 @@ export function memoryStore() {
   const m = new Map();
   return { get: async (k) => (m.has(k) ? JSON.parse(m.get(k)) : null), set: async (k, v) => { m.set(k, JSON.stringify(v)); }, del: async (k) => { m.delete(k); }, list: async () => [...m.keys()].filter((k) => k.startsWith('sub:')) };
 }
+
+// Coach usage counters (separate store, never mixed with push subscriptions).
+let coachOverride = null;
+export function setCoachStoreForTests(s) { coachOverride = s; }
+export async function getCoachStore() {
+  if (coachOverride) return coachOverride;
+  const { getStore } = await import('@netlify/blobs');
+  const st = getStore('coach-usage');
+  return { get: (k) => st.get(k, { type: 'json' }), set: (k, v) => st.setJSON(k, v) };
+}
