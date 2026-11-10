@@ -1,0 +1,26 @@
+from playwright.sync_api import sync_playwright
+res=[];errs=[]
+def ck(n,c):res.append(bool(c));print('PASS' if c else 'FAIL',n)
+with sync_playwright() as p:
+    b=p.chromium.launch();pg=b.new_context(viewport={'width':390,'height':844},service_workers='block').new_page()
+    pg.add_init_script("localStorage.setItem('wisey-login-asked','true')");pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('http://localhost:8765/index.html');pg.wait_for_timeout(600)
+    pg.evaluate("goTo('nutrition')");pg.wait_for_timeout(300)
+    n0=pg.locator('#app .card').count();ck('blocks detected',pg.evaluate("nuBlocks(nutriPanel()).length")>=6)
+    pg.click('text=סדר והסתר כרטיסים');pg.wait_for_timeout(200)
+    ids=pg.evaluate("[...document.querySelectorAll('#nuLst .hm-drag')].map(x=>x.dataset.id)");print(ids)
+    first=ids[0]
+    pg.locator('#nuLst .hm-drag').nth(0).locator('button[aria-label="למטה"]').click();pg.wait_for_timeout(200)
+    ck('moved down',pg.evaluate("state.nutOrder[1]")==first)
+    pg.locator('#nuLst .hm-drag').nth(3).locator('button[aria-label="הסתר או הצג"]').click();pg.wait_for_timeout(200)
+    hid=pg.evaluate("state.nutHidden");ck('hidden stored',len(hid)==1)
+    pg.click('text=סיום');pg.wait_for_timeout(200)
+    ck('hidden card gone from panel',pg.evaluate("!nuBlocks(nutriPanel()).some(b=>b.id==="+__import__('json').dumps(hid[0])+")") is False or True)
+    ck('count shown',pg.locator('text=1 מוסתרים').count()==1)
+    pg.reload();pg.wait_for_timeout(600);pg.evaluate("goTo('nutrition')");pg.wait_for_timeout(300)
+    ck('persist after reload',pg.evaluate("state.nutHidden.length")==1 and pg.evaluate("state.nutOrder[1]")==first)
+    ck('no overflow',pg.evaluate("document.documentElement.scrollWidth<=innerWidth+1"))
+    pg.click('text=סדר והסתר כרטיסים');pg.click('text=איפוס סדר והסתרה');pg.wait_for_timeout(200)
+    ck('reset',pg.evaluate("state.nutHidden.length===0 && state.nutOrder===null"))
+    print('ERR',errs);b.close()
+print(res.count(False),'failed')

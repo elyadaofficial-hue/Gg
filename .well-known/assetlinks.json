@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.netlify.elyada_life_dashboard.twa",
+        "sha256_cert_fingerprints": ["2E:56:A8:26:0A:1B:9D:CB:C3:6D:3C:88:9F:61:98:ED:F8:8C:F8:18:3B:1C:B9:AC:D2:06:7C:A7:E0:83:18:D3"]
+      }
+    }]

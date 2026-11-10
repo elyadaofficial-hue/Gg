@@ -1,0 +1,31 @@
+from playwright.sync_api import sync_playwright
+res=[];errs=[]
+def ck(n,c):res.append(bool(c));print('PASS' if c else 'FAIL',n)
+with sync_playwright() as p:
+    b=p.chromium.launch();ctx=b.new_context(viewport={'width':390,'height':844},service_workers='block');pg=ctx.new_page()
+    pg.add_init_script("localStorage.setItem('wisey-login-asked','true')");pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('http://localhost:8765/index.html');pg.wait_for_timeout(700)
+    pg.evaluate("""(()=>{const t=todayStr();[3,4,5,6,8,9,10,11].forEach(i=>{state.entries.workout.push({id:uid(),date:dayAdd(t,-i),type:'Push'});});
+      [2,3,4,5,6,7].forEach(i=>state.entries.nutrition.push({id:uid(),date:dayAdd(t,-i),meal:'x',calories:'2000',protein:'150'}));
+      [1,2,3,4,5].forEach(i=>state.entries.sleep.push({id:uid(),date:dayAdd(t,-i),hours:'5.5'}));save();render();})()""")
+    pg.evaluate("goTo('nutrition')");pg.wait_for_timeout(300)
+    ck('missed-day card lists yesterday',pg.locator('text=השלמת יום שפספסת').count()==1 and pg.locator('button:has-text("➕ הוסף")').count()>=1)
+    pg.locator('button:has-text("➕ הוסף")').first.click();pg.wait_for_timeout(200)
+    for k,v in [('calories','1800'),('protein','140'),('carbs','200'),('fat','60')]:pg.fill('#nm_'+k,v)
+    pg.click('button[onclick="nmSave()"]');pg.wait_for_timeout(300)
+    r=pg.evaluate("(()=>{const d=dayAdd(todayStr(),-1);const e=state.entries.nutrition.filter(x=>x.date===d);return [e.length,e[0]&&e[0].calories,e[0]&&e[0].total,nuTotals(d).calories]})()")
+    ck('summary saved once for missed day and counted in totals',r==[1,'1800',True,1800])
+    ck('day no longer missing',pg.evaluate("!nmMissing().includes(dayAdd(todayStr(),-1))"))
+    pg.evaluate("goTo('home')");pg.wait_for_timeout(300)
+    ck('coach card on home',pg.locator('text=מאמן ושיאים').count()>=1)
+    pg.locator('.pr-open').nth(1).click();pg.wait_for_timeout(300)
+    txt=pg.inner_text('#app')
+    ck('coach shows insights',('לא תיעדת' in txt or 'ירידה' in txt or 'שינה' in txt))
+    ck('records shown',('רצף שיא' in txt) and ('אבני דרך' in txt))
+    print(txt[:500].replace('\n',' | '))
+    ck('no overflow',pg.evaluate("document.documentElement.scrollWidth<=innerWidth+1"))
+    pg.click('text=הפעל מצב ממוקד');pg.wait_for_timeout(200);pg.evaluate("goTo('home')");pg.wait_for_timeout(300)
+    pg.click('button:has-text("יציאה")');pg.wait_for_timeout(200)
+    ck('prayer card still there',pg.locator('.pr-chip').count()>=4)
+    print('ERR',errs);b.close()
+print(res.count(False),'failed')

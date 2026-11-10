@@ -1,0 +1,13 @@
+# Static site: everything in the repo root is published; functions live in netlify/functions.
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# The service worker must never be cached by the CDN, or updates (and push fixes) arrive late.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
