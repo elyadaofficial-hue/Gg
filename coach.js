@@ -150,7 +150,7 @@
       if (!msg && (name === 'NotAllowedError' || name === 'SecurityError')) msg = 'אין הרשאה למיקרופון. אשר אותה בהגדרות האתר בדפדפן ונסה שוב.';
       if (!msg && name === 'NotFoundError') msg = 'לא נמצא מיקרופון במכשיר.';
       if (!msg && e && /closed:|socket|timeout/.test(e.message || '')) msg = 'ההתחברות לשירות הקול נכשלה (ייתכן שהדגם לא זמין). אפשר להמשיך בטקסט.';
-      this.set('error', msg || 'משהו השתבש. נסה שוב או כתוב בטקסט.');
+      this.set('error', (msg || 'משהו השתבש. נסה שוב או כתוב בטקסט.') + ' [' + (c || name || (e && e.message) || '?') + ']');
     },
 
     stop() { this.userStop = true; this.tries = 0; this.teardown(true); this.set('idle'); },
@@ -182,11 +182,15 @@
       if (!ws.sess) { this.msg = 'צריך להתחבר לחשבון כדי לשוחח עם המאמן.'; ui(); return; }
       this.text = ''; if (inp) inp.value = ''; this.chat = this.chat || []; this.chat.push({ role: 'user', text: t }); this.log.push({ who: 'user', t }); this.busyText = true; logUi(); ui();
       try {
-        const jwt = await wsToken(); const r = await fetch(API + 'text', { method: 'POST', headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: this.chat.slice(-12) }) });
+        let jwt; try { jwt = await wsToken(); } catch (e) { throw Object.assign(new Error('x'), { code: 'login' }); }
+        let r; try { r = await fetch(API + 'text', { method: 'POST', headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: this.chat.slice(-12) }) }); } catch (e) { throw Object.assign(new Error('x'), { code: 'net' }); }
         const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw Object.assign(new Error('x'), { code: j.error });
+        if (!r.ok) throw Object.assign(new Error('x'), { code: j.error || (r.status === 404 ? 'functions_missing' : 'http' + r.status), status: r.status });
         this.chat.push({ role: 'model', text: j.text }); this.log.push({ who: 'coach', t: j.text });
-      } catch (e) { this.chat.pop(); this.log.push({ who: 'sys', t: e.code === 'daily_limit' || e.code === 'provider_limit' ? 'מכסת ה-AI נגמרה כרגע. נסה מאוחר יותר.' : 'לא הצלחתי לענות כרגע. נסה שוב.' }); }
+      } catch (e) {
+        this.chat.pop(); const c = e.code, M = { login: 'צריך להתחבר לחשבון (תפריט ☰) כדי לשוחח עם המאמן.', login_required: 'ההתחברות פגה. התחבר שוב דרך התפריט.', net: 'אין חיבור לשרת.', not_configured: 'מפתח ה-AI עדיין לא מוגדר בשרת (GEMINI_API_KEY).', functions_missing: 'פונקציות השרת של המאמן לא פורסמו באתר.', daily_limit: 'הגעת למגבלה היומית.', provider_limit: 'מכסת ה-AI החינמית נגמרה כרגע.', upstream_error: 'שירות ה-AI החזיר שגיאה.', bad_request: 'הבקשה לא תקינה.' };
+        this.log.push({ who: 'sys', t: (M[c] || 'לא הצלחתי לענות כרגע.') + ' [' + (c || '?') + (e.status ? ' ' + e.status : '') + ']' });
+      }
       this.busyText = false; logUi(); ui();
     },
     clear() { this.log = []; this.chat = []; logUi(); }
@@ -204,11 +208,11 @@
   .cv-st{text-align:center;font-weight:700;font-size:16px;margin:6px 0 2px}.cv-msg{text-align:center;color:var(--ink-soft);font-size:13px;min-height:18px;margin:2px 8px 10px}
   .cv-row{display:flex;gap:8px}.cv-row .add{flex:1;min-height:52px;margin:0}
   .cv-log{max-height:240px;overflow:auto;margin-top:10px;display:flex;flex-direction:column;gap:6px;-webkit-overflow-scrolling:touch}
-  .cv-b{padding:8px 11px;border-radius:12px;font-size:14px;line-height:1.45;max-width:88%;overflow-wrap:anywhere}.cv-b.user{align-self:flex-start;background:rgba(var(--glass),.08)}.cv-b.coach{align-self:flex-end;background:rgba(157,107,255,.18)}.cv-b.sys{align-self:center;color:var(--ink-soft);font-size:12.5px}
-  .cv-tx{display:flex;gap:8px;margin-top:10px}.cv-tx input{flex:1;min-width:0;min-height:48px;font-size:16px;border-radius:12px;border:1px solid var(--line);background:rgba(var(--glass),.06);color:var(--ink);padding:0 12px}.cv-tx button{min-height:48px;min-width:64px;margin:0}`;
+  .cv-b{unicode-bidi:plaintext;padding:8px 11px;border-radius:12px;font-size:14px;line-height:1.45;max-width:88%;overflow-wrap:anywhere}.cv-b.user{align-self:flex-start;background:rgba(var(--glass),.08)}.cv-b.coach{align-self:flex-end;background:rgba(157,107,255,.18)}.cv-b.sys{align-self:center;color:var(--ink-soft);font-size:12.5px}
+  .cv-tx{display:flex;gap:8px;margin-top:10px}.cv-tx input{text-align:start;unicode-bidi:plaintext;flex:1;min-width:0;min-height:48px;font-size:16px;border-radius:12px;border:1px solid var(--line);background:rgba(var(--glass),.06);color:var(--ink);padding:0 12px}.cv-tx button{min-height:48px;min-width:64px;margin:0}`;
   function css() { if (!document.getElementById('cv-css')) { const s = document.createElement('style'); s.id = 'cv-css'; s.textContent = CSS; document.head.appendChild(s); } }
   const live = () => ['connecting', 'listening', 'thinking', 'speaking'].includes(Coach.state);
-  function logHtml() { return Coach.log.map((m) => `<div class="cv-b ${m.who}">${esc(m.t)}</div>`).join('') || '<div class="wk-sub" style="text-align:center">עוד אין שיחה. לחץ "דבר עם המאמן" או כתוב למטה.</div>'; }
+  function logHtml() { return Coach.log.map((m) => `<div class="cv-b ${m.who}" dir="auto">${esc(m.t)}</div>`).join('') || '<div class="wk-sub" style="text-align:center">עוד אין שיחה. לחץ "דבר עם המאמן" או כתוב למטה.</div>'; }
   function html() {
     const c = Coach, on = live(), busy = c.state === 'connecting';
     return `<div class="card cv" dir="rtl" id="cv-card"><label>🎙️ שיחה עם המאמן</label>
@@ -217,7 +221,7 @@
       <div class="cv-msg" id="cv-msg">${esc(c.msg)}</div>
       <div class="cv-row" id="cv-btns">${on ? `<button class="add" style="background:rgba(var(--glass),.08);color:var(--ink);border:1px solid var(--line)" onclick="cvMute()" ${busy ? 'disabled' : ''}>${c.muted ? '🔊 בטל השתקה' : '🔇 השתק'}</button><button class="add" style="background:#b3263e" onclick="cvStop()">⏹ סיים</button>` : `<button class="add" onclick="cvStart()">🎤 ${c.state === 'error' || c.state === 'disconnected' ? 'נסה שוב' : 'דבר עם המאמן'}</button>`}</div>
       <div class="cv-log" id="cv-log" aria-live="polite">${logHtml()}</div>
-      <div class="cv-tx"><input id="cv-in" type="text" enterkeyhint="send" placeholder="או כתוב למאמן…" maxlength="500" ${c.busyText ? 'disabled' : ''} onkeydown="if(event.key==='Enter')cvSend()"><button class="add" onclick="cvSend()" ${c.busyText ? 'disabled' : ''}>שלח</button></div>
+      <div class="cv-tx"><input id="cv-in" type="text" dir="auto" enterkeyhint="send" placeholder="או כתוב למאמן…" maxlength="500" ${c.busyText ? 'disabled' : ''} onkeydown="if(event.key==='Enter')cvSend()"><button class="add" onclick="cvSend()" ${c.busyText ? 'disabled' : ''}>שלח</button></div>
       <div class="wk-sub" style="margin-top:8px">${c.usage ? `שיחה ${c.usage.used} מתוך ${c.usage.limit} היום. ` : ''}${c.log.length ? '<a href="#" onclick="cvClear();return false" style="color:var(--accent)">נקה שיחה</a> · ' : ''}השיחה לא נשמרת. אין עדיין גישה לנתוני הדשבורד שלך.</div></div>`;
   }
   function ui() { const card = document.getElementById('cv-card'); if (!card) return; const keep = (document.getElementById('cv-in') || {}).value, focus = document.activeElement && document.activeElement.id === 'cv-in'; card.outerHTML = html(); const i = document.getElementById('cv-in'); if (i && keep) i.value = keep; if (i && focus) i.focus(); if (live()) Coach.loop(); }
