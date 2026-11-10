@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='v11.1.2';
+const VERSION='v12.0.0-a1';
 const SHELL='life-dash-shell-'+VERSION, FONTS='life-dash-fonts-v1';
 const ASSETS=['./','./index.html','./coach.js','./manifest.json','./icon-180.png','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(SHELL).then(c=>c.addAll(ASSETS)));}); // no auto skipWaiting: the page asks the user
@@ -20,6 +20,7 @@ self.addEventListener('fetch',e=>{
   if(url.origin===location.origin&&url.pathname.indexOf('/api/')===0)return; // push API: always network, never cached
   if(url.origin===location.origin){
     if(req.mode==='navigate'){e.respondWith(networkFirst(req,'./index.html'));return;}
+    if(/\/coach\.js$/.test(url.pathname)){e.respondWith(networkFirst(req,'./coach.js'));return;} // always the freshest Coach code
     e.respondWith(caches.match(req).then(hit=>hit||networkFirst(req,'./index.html')));return;
   }
   if(url.hostname==='fonts.googleapis.com'||url.hostname==='fonts.gstatic.com'){

@@ -77,3 +77,10 @@ test('text: other Google failure returns Google status code for diagnosis', asyn
   setup(); const f = async (url) => url.includes('/auth/v1/user') ? new Response(JSON.stringify({ id: 'u8' }), { status: 200 }) : new Response(JSON.stringify({ error: { message: 'API key not valid' } }), { status: 403 });
   const r = await handleCoach('text', req({ messages: [{ role: 'user', text: 'x' }] }), f); assert.equal(r.status, 502); assert.equal(r.json.code, 403); assert.match(r.json.detail, /API key/);
 });
+
+test('text: transient Google 503 is retried and succeeds', async () => {
+  setup(); let n = 0; const f = async (url) => { if (url.includes('/auth/v1/user')) return new Response(JSON.stringify({ id: 'u7' }), { status: 200 });
+    if (url.includes(':generateContent')) { n++; return n < 3 ? new Response('{}', { status: 503 }) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'בסדר' }] } }] }), { status: 200 }); }
+    return new Response(JSON.stringify({ models: [] }), { status: 200 }); };
+  const r = await handleCoach('text', req({ messages: [{ role: 'user', text: 'היי' }] }), f); assert.equal(r.status, 200); assert.equal(r.json.text, 'בסדר'); assert.equal(n, 3);
+});

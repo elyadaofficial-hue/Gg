@@ -63,7 +63,18 @@ export async function discoverTextModel(key, fetchImpl = fetch) {
     return names[0] || null;
   } catch (e) { return null; }
 }
-async function textCall(model, key, body, fetchImpl) {
+const SLEEP = (ms) => new Promise((r) => setTimeout(r, ms));
+// Google sometimes answers 500/503 ("overloaded"); retry briefly before giving up.
+async function textCall(model, key, body, fetchImpl, sleep = SLEEP) {
+  let r;
+  for (let i = 0; i < 3; i++) {
+    r = await rawText(model, key, body, fetchImpl);
+    if (r.status !== 503 && r.status !== 500) return r;
+    if (i < 2) await sleep(i === 0 ? 500 : 1200);
+  }
+  return r;
+}
+function rawText(model, key, body, fetchImpl) {
   return fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) });
 }
 export async function geminiText(messages, fetchImpl = fetch) {
@@ -74,7 +85,7 @@ export async function geminiText(messages, fetchImpl = fetch) {
   let model = discovered || env('GEMINI_MODEL') || 'gemini-flash-latest', r;
   try {
     r = await textCall(model, key, body, fetchImpl);
-    if (r.status === 404 || r.status === 400) { // model name not valid for this key: look up one that is, once
+    if (r.status === 404 || r.status === 400 || r.status === 503 || r.status === 500) { // model name not valid for this key: look up one that is, once
       const alt = await discoverTextModel(key, fetchImpl);
       if (alt && alt !== model) { model = alt; r = await textCall(model, key, body, fetchImpl); if (r.ok) discovered = alt; }
     }
