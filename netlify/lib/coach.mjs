@@ -52,16 +52,35 @@ export async function geminiLiveToken(fetchImpl = fetch, now = Date.now()) {
 }
 
 export const COACH_TEXT_SYSTEM = 'אתה מאמן אישי ישיר, כן, מעשי ותומך. ענה בעברית בקצרה (עד 4 משפטים), בלי נאומי מוטיבציה, בלי בושה או לחץ. אתה לא רופא ולא מטפל. אל תמציא נתונים על המשתמש שלא נמסרו לך.';
+let discovered = null; // text model found via the models list, remembered while the function instance lives
+// Finds a general text model this key can use (skips live/audio/image/etc.). Used only if the configured one is rejected.
+export async function discoverTextModel(key, fetchImpl = fetch) {
+  try {
+    const r = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
+    if (!r.ok) return null;
+    const names = ((await r.json()).models || []).filter((m) => (m.supportedGenerationMethods || []).includes('generateContent') && /^models\/gemini-.*flash/.test(m.name) && !/live|tts|image|audio|robotics|embed|transcribe|translate|thinking|preview/.test(m.name)).map((m) => m.name.replace(/^models\//, ''));
+    names.sort((x, y) => (/latest/.test(y) ? 1 : 0) - (/latest/.test(x) ? 1 : 0) || (x < y ? 1 : -1));
+    return names[0] || null;
+  } catch (e) { return null; }
+}
+async function textCall(model, key, body, fetchImpl) {
+  return fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) });
+}
 export async function geminiText(messages, fetchImpl = fetch) {
   const key = env('GEMINI_API_KEY');
   if (!key) return { status: 503, json: { error: 'not_configured' } };
-  const model = env('GEMINI_MODEL') || 'gemini-flash-latest';
   const contents = messages.map((m) => ({ role: m.role === 'model' ? 'model' : 'user', parts: [{ text: String(m.text).slice(0, 2000) }] }));
-  let r;
-  try { r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: COACH_TEXT_SYSTEM }] }, contents, generationConfig: { temperature: 0.7, maxOutputTokens: 400 } }) }); }
-  catch (e) { return { status: 502, json: { error: 'upstream_unreachable' } }; }
+  const body = { systemInstruction: { parts: [{ text: COACH_TEXT_SYSTEM }] }, contents, generationConfig: { temperature: 0.7, maxOutputTokens: 400 } };
+  let model = discovered || env('GEMINI_MODEL') || 'gemini-flash-latest', r;
+  try {
+    r = await textCall(model, key, body, fetchImpl);
+    if (r.status === 404 || r.status === 400) { // model name not valid for this key: look up one that is, once
+      const alt = await discoverTextModel(key, fetchImpl);
+      if (alt && alt !== model) { model = alt; r = await textCall(model, key, body, fetchImpl); if (r.ok) discovered = alt; }
+    }
+  } catch (e) { return { status: 502, json: { error: 'upstream_unreachable' } }; }
   if (r.status === 429) return { status: 429, json: { error: 'provider_limit' } };
-  if (!r.ok) return { status: 502, json: { error: 'upstream_error', code: r.status } };
+  if (!r.ok) { let detail = ''; try { detail = String((await r.json()).error?.message || '').slice(0, 160); } catch (e) {} console.error('gemini text', r.status, detail); return { status: 502, json: { error: 'upstream_error', code: r.status, detail } }; }
   try { const d = await r.json(); const text = (d.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim(); return text ? { status: 200, json: { text } } : { status: 502, json: { error: 'empty' } }; }
   catch (e) { return { status: 502, json: { error: 'bad_upstream' } }; }
 }

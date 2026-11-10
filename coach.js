@@ -185,11 +185,11 @@
         let jwt; try { jwt = await wsToken(); } catch (e) { throw Object.assign(new Error('x'), { code: 'login' }); }
         let r; try { r = await fetch(API + 'text', { method: 'POST', headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: this.chat.slice(-12) }) }); } catch (e) { throw Object.assign(new Error('x'), { code: 'net' }); }
         const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw Object.assign(new Error('x'), { code: j.error || (r.status === 404 ? 'functions_missing' : 'http' + r.status), status: r.status });
+        if (!r.ok) throw Object.assign(new Error('x'), { code: j.error || (r.status === 404 ? 'functions_missing' : 'http' + r.status), status: j.code || r.status, detail: j.detail });
         this.chat.push({ role: 'model', text: j.text }); this.log.push({ who: 'coach', t: j.text });
       } catch (e) {
         this.chat.pop(); const c = e.code, M = { login: 'צריך להתחבר לחשבון (תפריט ☰) כדי לשוחח עם המאמן.', login_required: 'ההתחברות פגה. התחבר שוב דרך התפריט.', net: 'אין חיבור לשרת.', not_configured: 'מפתח ה-AI עדיין לא מוגדר בשרת (GEMINI_API_KEY).', functions_missing: 'פונקציות השרת של המאמן לא פורסמו באתר.', daily_limit: 'הגעת למגבלה היומית.', provider_limit: 'מכסת ה-AI החינמית נגמרה כרגע.', upstream_error: 'שירות ה-AI החזיר שגיאה.', bad_request: 'הבקשה לא תקינה.' };
-        this.log.push({ who: 'sys', t: (M[c] || 'לא הצלחתי לענות כרגע.') + ' [' + (c || '?') + (e.status ? ' ' + e.status : '') + ']' });
+        this.log.push({ who: 'sys', t: (M[c] || 'לא הצלחתי לענות כרגע.') + ' [' + (c || '?') + (e.status ? ' ' + e.status : '') + ']' + (e.detail ? ' ' + e.detail : '') });
       }
       this.busyText = false; logUi(); ui();
     },

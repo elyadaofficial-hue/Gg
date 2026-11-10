@@ -58,3 +58,22 @@ test('api: cross-origin 403, GET 405, unknown route 404, 401 via HTTP layer', as
   assert.equal((await api(mk('POST', 'https://evil.com'))).status, 403); assert.equal((await api(mk('GET'))).status, 405);
   const r = await api(mk('POST', O)); assert.equal(r.status, 401); assert.equal(r.headers.get('cache-control'), 'no-store');
 });
+
+test('text: model rejected (404) -> discovers a valid flash model once and succeeds', async () => {
+  setup(); delete process.env.GEMINI_MODEL; const calls = [];
+  const f = async (url, init) => { calls.push(url);
+    if (url.includes('/auth/v1/user')) return new Response(JSON.stringify({ id: 'u9' }), { status: 200 });
+    if (url.includes('gemini-flash-latest:')) return new Response(JSON.stringify({ error: { message: 'not found' } }), { status: 404 });
+    if (url.endsWith('/v1beta/models?pageSize=200')) return new Response(JSON.stringify({ models: [
+      { name: 'models/gemini-3.8-live', supportedGenerationMethods: ['bidiGenerateContent'] },
+      { name: 'models/gemini-3.5-flash', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-3.5-flash-preview-tts', supportedGenerationMethods: ['generateContent'] }] }), { status: 200 });
+    if (url.includes('gemini-3.5-flash:')) return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'בוא נתחיל' }] } }] }), { status: 200 });
+    throw new Error('unexpected ' + url); };
+  const r = await handleCoach('text', req({ messages: [{ role: 'user', text: 'היי' }] }), f); assert.equal(r.status, 200); assert.equal(r.json.text, 'בוא נתחיל');
+  assert.ok(!calls.some((u) => u.includes('tts:')));
+});
+test('text: other Google failure returns Google status code for diagnosis', async () => {
+  setup(); const f = async (url) => url.includes('/auth/v1/user') ? new Response(JSON.stringify({ id: 'u8' }), { status: 200 }) : new Response(JSON.stringify({ error: { message: 'API key not valid' } }), { status: 403 });
+  const r = await handleCoach('text', req({ messages: [{ role: 'user', text: 'x' }] }), f); assert.equal(r.status, 502); assert.equal(r.json.code, 403); assert.match(r.json.detail, /API key/);
+});
